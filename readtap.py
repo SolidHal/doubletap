@@ -39,6 +39,8 @@ def send_key_boppreh_keyboard(key):
     keystring = keystring + key[last]
     keyboard.send(keystring)
 
+blank_tap = 0b00000
+
 # internal modifiers
 NUMS = "number_layer" # also includes the arrow keys
 SYMS = "symbols_layer"
@@ -169,12 +171,11 @@ def parseTapcode(leftcode, rightcode):
         # return combination of both lists
         return (right_prefix + left_cmd)
 
-    #TODO combine left + right into dualcode
-
+    leftcode = leftcode<<5
+    dualcode = leftcodecode | rightcode
     dual = dual_map.get(dualcode, default = None)
     if (dual != None):
         return dual
-
 
     #elsewise we found nothing
     return None
@@ -200,14 +201,27 @@ other_hand_time = None
 
 other_hand_timer = None
 
-def WaitTap(hand, command):
-    print("("+hand+") recognized=" + str(command))
+def WaitTap(hand, code):
+    print("("+hand+") recognized=" + str(code))
+    if (hand == "left"):
+        rightcode = blank_tap
+        leftcode = code
+    elif (hand == "right"):
+        leftcode = blank_tap
+        rightcode = code
+    else:
+        print ("Invalid hand arg")
+        return None
+
+    command = parseTapcode(leftcode, rightcode)
+    print("("+hand+") recognized code =" + str(code) + " parsed to command =" +command)
+
 
 #since the bleak lib insists on using synchronous callbacks instead of async promises, etc we have to get a little stupid and use threading.
 # threading, callbacks, and asyncio all in one. how fun
 # if its stupid, but works, it is still stupid
 
-def DecodeTap(loop, hand, tapcode):
+def DetectTap(loop, hand, tapcode):
     print("in DecodeTap")
     global other_hand
     global other_hand_code
@@ -215,12 +229,13 @@ def DecodeTap(loop, hand, tapcode):
     global other_hand_timer
 
     now = datetime.now()
-    if (hand == "left"):
-        tapcode = tapcode<<5
     if (other_hand != None) and ((now - other_hand_time) < timedelta(milliseconds=50)):
         other_hand_timer.cancel()
-        command = other_hand_code | tapcode
         print("(dual) recognized=" + str(command))
+
+        #TODO: need to have hand detection like in WaitTap, turn into a function so we can use it in both places
+        command = parseTapcode(leftcode, rightcode)
+        print("("+hand+") recognized code =" + str(code) + " parsed to command =" +command)
         other_hand = None
         return
 
@@ -242,7 +257,7 @@ def OnTapped(loop, address, identifier, tapcode):
     if (taps_by_mac[address] == "right"):
         tapcode = reverseBits(tapcode)
     print(taps_by_mac[address] + " (" + address + ") tapped " + str(tapcode))
-    DecodeTap(loop, taps_by_mac[address], tapcode)
+    DetectTap(loop, taps_by_mac[address], tapcode)
 
 def OnTapConnected(self, identifier, name, fw):
     print(identifier + " Tap: " + str(name), " FW Version: ", fw)

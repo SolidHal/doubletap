@@ -226,23 +226,24 @@ def parseTapcode(leftcode, rightcode):
             return (left_prefix + right_cmd)
 
 
-    print(right_prefix)
+    print("right prefix = "+ str(right_prefix))
     #handle left taps with/without right prefixes
     #don't want to handle right prefix taps with no left taps
     if ( (right_prefix != None) and (leftcode != blank_code) ):
         # default to no internal prefixes
         left_layer = left_cmd_layer
         for prefix in right_prefix:
-            print(prefix)
+            print("prefix in right prefix = " + str(prefix))
             layer = right_prefix_layers.get(prefix, None)
             # if this is None for all prefixes in left_prefix, then we have only external prefixes
-            if (left_layer != None):
+            if (layer != None):
                 left_layer = layer
                 layer = None
+                print ("set left_layer = " + str(left_layer))
                 right_prefix = [n for n in right_prefix if n != prefix]
                 break
 
-        print(left_layer)
+        print("left_layer is = " + str(left_layer))
         left_cmd = left_layer.get(leftcode, None)
         if (left_cmd !=None ):
             # this is legal

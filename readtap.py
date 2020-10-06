@@ -46,16 +46,18 @@ class DoubleTap:
 
     blank_code = 0b00000
 
-
-    #TODO: create these automatically or replace them altogether
-    left_tap = {"name":"left", "mac":"CE:BB:BB:2E:60:99"}
-    right_tap = {"name":"right", "mac":"F3:64:D7:5D:8D:D1"}
-    taps_by_mac = {left_tap["mac"]:left_tap["name"], right_tap["mac"]:right_tap["name"]}
-
     def __init__(self, lefttap, righttap, doublelayer):
         self.left = lefttap
         self.right = righttap
         self.doublelayer = doublelayer
+
+    async def register(self):
+        await self.left.tap_sdk.register_tap_events(self.onTapped)
+        await self.left.tap_sdk.register_mouse_events(self.onMoused)
+
+        await self.right.tap_sdk.register_tap_events(self.onTapped)
+        await self.right.tap_sdk.register_mouse_events(self.onMoused)
+
 
     def _getCommand(self, hand, otherhand, prefix, code):
         # for layer + modifier prefixes, we have to find the layer in the prefix list
@@ -65,7 +67,6 @@ class DoubleTap:
         # if this is None for all prefixes in left_prefix, then we have only external prefixes
         cmdlayer = otherhand.default_layer
         for pre in prefix:
-            print(pre)
             layer = hand.getOtherHandLayer(pre)
             if (layer != None):
                 cmdlayer = layer
@@ -76,7 +77,6 @@ class DoubleTap:
                 print("prefix after removing: {}".format(prefix))
                 break
 
-        print(cmdlayer)
         cmd = otherhand.getCommand(code, cmdlayer)
         if (cmd !=None ):
             # this is legal
@@ -85,6 +85,10 @@ class DoubleTap:
         else:
             return None
 
+    # parses the following situations:
+    # 1) a one handed tap, one normal code and one blank code where either a command or prefix key is pressed ("ctrl", or "q")
+    # 2) a prefix and command 2 handed tap, the prefix decides how the command is parsed and can be a combination of internal (layers) and external (shift, ctrl, win) prefixes
+    # 3) special 2 handed "doubletaps" where 2 handed taps that wouldn't make sense ("win" and "win" or "q" and "q") are instead mapped to unique functions
     def parse(self, leftcode, rightcode):
         left_prefix = self.left.getPrefix(leftcode)
         right_prefix = self.right.getPrefix(rightcode)
@@ -118,11 +122,11 @@ class DoubleTap:
         return int('{:05b}'.format(code)[::-1], 2)
 
     def _timerTap(self, hand, code):
-        print("("+hand+") recognized=" + str(code))
-        if (hand == "left"):
+        print("("+hand.name+") recognized=" + str(code))
+        if (hand == self.left):
             rightcode = self.blank_code
             leftcode = code
-        elif (hand == "right"):
+        elif (hand == self.right):
             leftcode = self.blank_code
             rightcode = code
         else:
@@ -130,21 +134,21 @@ class DoubleTap:
             return None
 
         keys = self.parse(leftcode, rightcode)
-        print("("+hand+") recognized code =" + str(code) + " parsed to keys =" + str(keys))
+        print("("+hand.name+") recognized code =" + str(code) + " parsed to keys =" + str(keys))
 
     other_hand = None
     other_hand_code = None
     other_hand_time = None
-    other_hand_timer = None
+    other_hand_thread = None
 
     def detect(self, hand, code):
         now = datetime.now()
         if (self.other_hand != None) and ((now - self.other_hand_time) < timedelta(milliseconds=50)):
-            self.other_hand_timer.cancel()
-            if (hand == "left"):
+            self.other_hand_thread.cancel()
+            if (hand == self.left):
                 rightcode = self.other_hand_code
                 leftcode = code
-            elif (hand == "right"):
+            elif (hand == self.right):
                 leftcode = self.other_hand_code
                 rightcode = code
             else:
@@ -159,30 +163,46 @@ class DoubleTap:
         self.other_hand = hand
         self.other_hand_code = code
         self.other_hand_time = datetime.now()
-        self.other_hand_timer = Timer(0.07, self._timerTap, args = [hand, code])
-        self.other_hand_timer.start()
+        self.other_hand_thread = Timer(0.07, self._timerTap, args = [hand, code])
+        self.other_hand_thread.start()
 
 
+    ### Callbacks ###
     def onTapped(self, loop, address, identifier, tapcode):
-        if (self.taps_by_mac[address] == "right"):
+        hand = None
+        if (address == self.right.address):
             tapcode = self._reverseBits(tapcode)
-        print(self.taps_by_mac[address] + " (" + address + ") tapped " + str(tapcode))
-        self.detect(self.taps_by_mac[address], tapcode)
+            hand = self.right
+        else:
+            hand = self.left
+        print(hand.name + " (" + address + ") tapped " + str(tapcode))
+        self.detect(hand, tapcode)
 
+    def onMoused(address, identifier, vx, vy, isMouse):
+        print(identifier + " mouse movement: %d, %d, %d" % (vx, vy, isMouse))
 
 
 class Tap:
 
-    def __init__(self, address, layer_config):
+    def __init__(self, address, name, layer_config, loop):
         self.address = address
+        self.name = name
 
         self.layer_config = layer_config
         self.layer_list = layer_config[2]
         # list of cmd layers on the other hand that can be accessed by this hand through prefixes
         self.other_hand_layers = layer_config[3]
-        print("other_hand_layers = {}".format(self.other_hand_layers))
         self.prefix_layer = self.layer_config[0]
         self.default_layer = self.layer_config[1]
+        self.tap_sdk = TapSDK(address, loop)
+
+    async def connect(self):
+        if not await self.tap_sdk.client.connect_retrieved():
+            print("Error connecting to {}".format(self.address))
+            return None
+        print("Connected to {}".format(self.tap_sdk.client.address))
+        await self.tap_sdk.set_input_mode(TapInputMode("controller"))
+
 
     def getPrefix(self, code):
         prefix = self.prefix_layer.get(code, None)
@@ -192,7 +212,6 @@ class Tap:
             return None
 
     def getOtherHandLayer(self, prefix):
-        print("prefix = {}".format(prefix))
         layer = self.other_hand_layers.get(prefix, None)
         if (layer != None):
             return layer.copy()
@@ -203,19 +222,10 @@ class Tap:
         return layer.get(code, None)
 
 
-left_tap = {"name":"left", "mac":"CE:BB:BB:2E:60:99"}
-right_tap = {"name":"right", "mac":"F3:64:D7:5D:8D:D1"}
-taps_by_mac = {left_tap["mac"]:left_tap["name"], right_tap["mac"]:right_tap["name"]}
 
 
 def OnMouseModeChange(address, identifier, mouse_mode):
     print(identifier + " changed to mode " + str(mouse_mode))
-
-def OnTapped(loop, address, identifier, tapcode):
-    if (taps_by_mac[address] == "right"):
-        tapcode = reverseBits(tapcode)
-    print(taps_by_mac[address] + " (" + address + ") tapped " + str(tapcode))
-    DetectTap(loop, taps_by_mac[address], tapcode)
 
 def OnTapConnected(self, identifier, name, fw):
     print(identifier + " Tap: " + str(name), " FW Version: ", fw)
@@ -225,47 +235,19 @@ def OnTapDisconnected(self, identifier):
     print(identifier + " Tap: " + identifier + " disconnected")
 
 
-def OnMoused(address, identifier, vx, vy, isMouse):
-    print(identifier + " mouse movement: %d, %d, %d" % (vx, vy, isMouse))
-
-
 
 async def run(loop=None, debug=True):
-    # if debug:
-    #     import sys
 
-    #     loop.set_debug(True)
-    #     h = logging.StreamHandler(sys.stdout)
-    #     h.setLevel(logging.WARNING)
-    #     logger.addHandler(h)
-    left = TapSDK(left_tap["mac"], loop)
-    right = TapSDK(right_tap["mac"], loop)
+    left_tap = {"name":"left", "mac":"CE:BB:BB:2E:60:99"}
+    right_tap = {"name":"right", "mac":"F3:64:D7:5D:8D:D1"}
+    taps_by_mac = {left_tap["mac"]:left_tap["name"], right_tap["mac"]:right_tap["name"]}
 
-    left_obj = Tap(left_tap["mac"], taplayers.left)
-    right_obj = Tap(right_tap["mac"], taplayers.right)
-    doubletap = DoubleTap(left_obj, right_obj, taplayers.doublelayer)
-
-
-
-    if not await left.client.connect_retrieved():
-        print("Error connecting to {}".format(left_tap["mac"]))
-        return None
-
-    print("Connected to {}".format(left.client.address))
-
-    await left.set_input_mode(TapInputMode("controller"))
-    await left.register_tap_events(doubletap.onTapped)
-    await left.register_mouse_events(OnMoused)
-
-    if not await right.client.connect_retrieved():
-        print("Error connecting to {}".format(right_tap["mac"]))
-        return None
-
-    print("Connected to {}".format(right.client.address))
-
-    await right.set_input_mode(TapInputMode("controller"))
-    await right.register_tap_events(doubletap.onTapped)
-    await right.register_mouse_events(OnMoused)
+    left = Tap(left_tap["mac"], "left", taplayers.left, loop)
+    await left.connect()
+    right = Tap(right_tap["mac"], "right", taplayers.right, loop)
+    await right.connect()
+    doubletap = DoubleTap(left, right, taplayers.doublelayer)
+    await doubletap.register()
 
 
     #TODO: could use tap.client.list_connected_taps to detect disconnects?

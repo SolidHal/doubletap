@@ -45,22 +45,22 @@ class DoubleTap:
         await self.right.tap_sdk.register_tap_events(self.onTapped)
         await self.right.tap_sdk.register_mouse_events(self.onMoused)
 
-        # wrapper to send keys using
-        # https://github.com/asweigart/pyautogui
-        # input: a list of keys to press simultaneously
-        def send_key_pyautogui(key):
-            pyautogui.press(key)
+    # wrapper to send keys using
+    # https://github.com/asweigart/pyautogui
+    # input: a list of keys to press simultaneously
+    def send_key_pyautogui(key):
+        pyautogui.press(key)
 
-        # wrapper to send keys using
-        # https://github.com/boppreh/keyboard#keyboard.send
-        def send_key_boppreh_keyboard(key):
-            keystring = ""
-            for i in range(0, (len(key)-1) ):
-                keystring = keystring + key[i] + "+"
+    # wrapper to send keys using
+    # https://github.com/boppreh/keyboard#keyboard.send
+    def send_key_boppreh_keyboard(key):
+        keystring = ""
+        for i in range(0, (len(key)-1) ):
+            keystring = keystring + key[i] + "+"
 
-            last = len(key) - 1
-            keystring = keystring + key[last]
-            keyboard.send(keystring)
+        last = len(key) - 1
+        keystring = keystring + key[last]
+        keyboard.send(keystring)
 
     def _send(self, keys, hand):
         print("( {} ) recognized command = {}".format(hand.name, keys))

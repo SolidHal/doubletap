@@ -24,22 +24,6 @@ from bleak import _logger as logger
 #depending on which hand has the letter
 
 
-# wrapper to send keys using
-# https://github.com/asweigart/pyautogui
-# input: a list of keys to press simultaneously
-def send_key_pyautogui(key):
-    pyautogui.press(key)
-
-# wrapper to send keys using
-# https://github.com/boppreh/keyboard#keyboard.send
-def send_key_boppreh_keyboard(key):
-    keystring = ""
-    for i in range(0, (len(key)-1) ):
-        keystring = keystring + key[i] + "+"
-
-    last = len(key) - 1
-    keystring = keystring + key[last]
-    keyboard.send(keystring)
 
 
 class DoubleTap:
@@ -50,6 +34,9 @@ class DoubleTap:
         self.left = lefttap
         self.right = righttap
         self.doublelayer = doublelayer
+        self.name = "doubletap"
+
+        self.taplock = False
 
     async def register(self):
         await self.left.tap_sdk.register_tap_events(self.onTapped)
@@ -57,6 +44,42 @@ class DoubleTap:
 
         await self.right.tap_sdk.register_tap_events(self.onTapped)
         await self.right.tap_sdk.register_mouse_events(self.onMoused)
+
+        # wrapper to send keys using
+        # https://github.com/asweigart/pyautogui
+        # input: a list of keys to press simultaneously
+        def send_key_pyautogui(key):
+            pyautogui.press(key)
+
+        # wrapper to send keys using
+        # https://github.com/boppreh/keyboard#keyboard.send
+        def send_key_boppreh_keyboard(key):
+            keystring = ""
+            for i in range(0, (len(key)-1) ):
+                keystring = keystring + key[i] + "+"
+
+            last = len(key) - 1
+            keystring = keystring + key[last]
+            keyboard.send(keystring)
+
+    def _send(self, keys, hand):
+        print("( {} ) recognized command = {}".format(hand.name, keys))
+
+        if (keys == None):
+            return
+
+        if (taplayers.taplock_key in keys):
+            self.taplock = not self.taplock
+            print("taplock set to {}".format(self.taplock))
+            return
+
+        if (self.taplock):
+            print("#### TAPLOCKED ####")
+            return
+
+        #TODO: call one of the send_key wrapper functions
+
+
 
 
     def _getCommand(self, hand, otherhand, prefix, code):
@@ -72,9 +95,7 @@ class DoubleTap:
                 cmdlayer = layer
                 # copy all of prefix over besides the internal layer so we don't try an send an internal layer marker
                 # to the keyboard parser
-                print("removing {} from {}".format(pre, prefix))
                 prefix = [n for n in prefix if n != pre]
-                print("prefix after removing: {}".format(prefix))
                 break
 
         cmd = otherhand.getCommand(code, cmdlayer)
@@ -89,6 +110,7 @@ class DoubleTap:
     # 1) a one handed tap, one normal code and one blank code where either a command or prefix key is pressed ("ctrl", or "q")
     # 2) a prefix and command 2 handed tap, the prefix decides how the command is parsed and can be a combination of internal (layers) and external (shift, ctrl, win) prefixes
     # 3) special 2 handed "doubletaps" where 2 handed taps that wouldn't make sense ("win" and "win" or "q" and "q") are instead mapped to unique functions
+    # 4) and internal layer prefix is tapped with no other taps. This should be considered a non-tap
     def parse(self, leftcode, rightcode):
         left_prefix = self.left.getPrefix(leftcode)
         right_prefix = self.right.getPrefix(rightcode)
@@ -134,7 +156,7 @@ class DoubleTap:
             return None
 
         keys = self.parse(leftcode, rightcode)
-        print("("+hand.name+") recognized code =" + str(code) + " parsed to keys =" + str(keys))
+        self._send(keys, hand)
 
     other_hand = None
     other_hand_code = None
@@ -143,7 +165,7 @@ class DoubleTap:
 
     def detect(self, hand, code):
         now = datetime.now()
-        if (self.other_hand != None) and ((now - self.other_hand_time) < timedelta(milliseconds=50)):
+        if (self.other_hand != None) and ((now - self.other_hand_time) < timedelta(milliseconds=60)):
             self.other_hand_thread.cancel()
             if (hand == self.left):
                 rightcode = self.other_hand_code
@@ -155,8 +177,8 @@ class DoubleTap:
                 print ("Invalid hand arg")
                 return None
             print("(dual) recognized (left) recognized code =" + str(leftcode) + " and (right) recognized code = " + str(rightcode))
-            command = self.parse(leftcode, rightcode)
-            print("(left) recognized code =" + str(leftcode) + " and (right) recognized code = " + str(rightcode) + " parsed to command =" + str(command))
+            keys = self.parse(leftcode, rightcode)
+            self._send(keys, self)
             self.other_hand = None
             return
 
@@ -178,7 +200,7 @@ class DoubleTap:
         print(hand.name + " (" + address + ") tapped " + str(tapcode))
         self.detect(hand, tapcode)
 
-    def onMoused(address, identifier, vx, vy, isMouse):
+    def onMoused(self, address, identifier, vx, vy, isMouse):
         print(identifier + " mouse movement: %d, %d, %d" % (vx, vy, isMouse))
 
 
@@ -219,6 +241,12 @@ class Tap:
             return None
 
     def getCommand(self, code, layer):
+        key = layer.get(code, None)
+        if (key == None):
+            return None
+        for k in key:
+            if (not isinstance(k, str)):
+                return None
         return layer.get(code, None)
 
 

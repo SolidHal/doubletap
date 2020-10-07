@@ -1,3 +1,8 @@
+### tap functions
+taplock_key = "taplock"
+
+
+# All internal layers should be integers
 #layers on left hand
 LEFT_PREFIX = 0 #left_prefix_layer
 LEFT_CMD = 1 #"left_blank_cmd_layer"
@@ -24,6 +29,7 @@ TFUNS = "tap_function_layer"
 
 
 
+# All keys should be strings
 left_prefix_layer = {
     #blank_tap
     0b00000 : [RIGHT_CMD],
@@ -112,19 +118,46 @@ right_blank_cmd_layer = {**right_prefix_layer, **right_cmd_layer}
 
 right_empty_map = {
     # empty - not exhaustive, but limited to "easier" taps
-    0b01010 : [""],
 }
 
 number_layer = {
-    
+    0b10000 : ["1"],
+    0b01000 : ["2"],
+    0b11000 : ["3"],
+    0b00100 : ["4"],
+    0b10100 : ["5"],
+    0b01100 : ["6"],
+    0b11100 : ["7"],
+    0b00010 : ["8"],
+    0b10010 : ["9"],
+    0b00111 : ["0"],
+    0b11111 : ["up"],
+    0b01111 : ["down"],
+    0b10111 : ["left"],
+    0b10011 : ["right"],
 }
 
 symbols_layer = {
-    
+    0b00001 : ["`"],
+    0b00010 : ["-"],
+    0b00011 : ["="],
+    0b00100 : ["["],
+    0b00101 : ["]"],
+    0b00110 : ["\\"],
+    0b00111 : ["'"],
 }
 
 function_layer = {
-    
+    0b10000 : ["f1"],
+    0b01000 : ["f2"],
+    0b11000 : ["f3"],
+    0b00100 : ["f4"],
+    0b10100 : ["f5"],
+    0b01100 : ["f6"],
+    0b11100 : ["f7"],
+    0b00010 : ["f8"],
+    0b10010 : ["f9"],
+    0b00111 : ["f10"],
 }
 
 tap_function_layer = {
@@ -152,7 +185,7 @@ doublelayer = {
     0b0010000100 : "Middles",
     0b0001001000 : "Pointers",
     0b0000110000 : "Thumbs",
-    0b1111111111 : "taplock"
+    0b1111111111 : taplock_key
 }
 
 # hand = [ [layers_on_hand_list], [other_hand_layers_list] ]
@@ -187,11 +220,9 @@ right = [
 
 
 
-
-
 ### reference
 
-full_one_hand_map = {
+full_left_hand_map = {
     0b00000 : [],
     0b00001 : [],
     0b00010 : [],
@@ -226,7 +257,50 @@ full_one_hand_map = {
     0b11111 : [],
 }
 
+full_right_hand_map = {
+    0b00000 : [],
+    0b10000 : [],
+    0b01000 : [],
+    0b11000 : [],
+    0b00100 : [],
+    0b10100 : [],
+    0b01100 : [],
+    0b11100 : [],
+    0b00010 : [],
+    0b10010 : [],
+    0b01010 : [],
+    0b11010 : [],
+    0b00110 : [],
+    0b10110 : [],
+    0b01110 : [],
+    0b11110 : [],
+    0b00001 : [],
+    0b10001 : [],
+    0b01001 : [],
+    0b11001 : [],
+    0b00101 : [],
+    0b10101 : [],
+    0b01101 : [],
+    0b11101 : [],
+    0b00011 : [],
+    0b10011 : [],
+    0b01011 : [],
+    0b11011 : [],
+    0b00111 : [],
+    0b10111 : [],
+    0b01111 : [],
+    0b11111 : [],
+
+}
+
+def _reverseBits(code):
+    return int('{:05b}'.format(code)[::-1], 2)
 
 def generate_hand_map():
+    print("left_hand_map")
     for i in range(0,32):
         print("    0b{:05b} : [],".format(i))
+    print("right_hand_map")
+    for i in range(0,32):
+        j = _reverseBits(i)
+        print("    0b{:05b} : [],".format(j))

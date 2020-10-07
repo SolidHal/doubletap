@@ -1,3 +1,5 @@
+# Copyright Hal Emmerich <SolidHal> 2020
+
 ### tap functions
 taplock_key = "taplock"
 
